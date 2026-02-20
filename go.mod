@@ -1,3 +1,3 @@
-module github.com/araujo88/go-iso8583/tree/main
+module github.com/araujo88/go-iso8583
 
 go 1.20
