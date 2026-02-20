@@ -19,10 +19,10 @@ This Go library provides tools for parsing and generating ISO8583 financial tran
 To install the ISO8583 library, use the following `go get` command:
 
 ```sh
-go get github.com/araujo88/go-iso8583
+go get github.com/leo-aa88/go-iso8583
 ```
 
-Replace `github.com/araujo88/go-iso8583` with the actual path to your library on GitHub.
+Replace `github.com/leo-aa88/go-iso8583` with the actual path to your library on GitHub.
 
 ## Usage
 
@@ -37,7 +37,7 @@ import (
     "fmt"
     "log"
 
-    "github.com/araujo88/go-iso8583"
+    "github.com/leo-aa88/go-iso8583"
 )
 
 func main() {
@@ -66,7 +66,7 @@ package main
 import (
     "fmt"
 
-    "github.com/araujo88/go-iso8583"
+    "github.com/leo-aa88/go-iso8583"
 )
 
 func main() {
