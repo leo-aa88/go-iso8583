@@ -11,7 +11,7 @@ A production-grade, spec-driven ISO8583 message parsing and building library wri
 - **Strict validation** — content type, length bounds, and encoding errors are all caught before touching the wire
 - **Typed errors** — every error identifies the field number and failure reason
 - **Zero external dependencies** — pure Go 1.20+
-- **90%+ test coverage** — comprehensive table-driven unit tests
+- **Comprehensive test suite** — table-driven unit tests covering parsing, building, encoding, bitmaps, and error paths
 
 ---
 
