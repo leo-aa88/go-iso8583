@@ -1,56 +1,89 @@
 package iso8583
 
-import (
-	"fmt"
-	"strconv"
-)
+// bitmapBytes is the wire size of one bitmap tier (primary or secondary).
+const bitmapBytes = 8 // 64 bits
 
-// parseBitmap converts a hexadecimal string representation of a bitmap
-// into a boolean array indicating the presence of fields.
-func parseBitmap(bitmapHex string) ([128]bool, error) {
+// parseBitmaps reads one or two 8-byte bitmaps from data starting at offset.
+// It returns a 128-element boolean array and the number of bytes consumed.
+// Bit 1 of the primary bitmap indicates the presence of a secondary bitmap.
+func parseBitmaps(data []byte, offset int) ([128]bool, int, error) {
 	var bitmap [128]bool
 
-	// Check if the bitmapHex length is exactly 16 characters (64 bits)
-	if len(bitmapHex) != 16 {
-		return bitmap, fmt.Errorf("invalid bitmap length: got %d, want 16", len(bitmapHex))
+	if offset+bitmapBytes > len(data) {
+		return bitmap, 0, ErrTruncatedBitmap
 	}
 
-	for i, hexChar := range bitmapHex {
-		// Convert hex character to its 4-bit binary equivalent
-		val, err := strconv.ParseUint(string(hexChar), 16, 4)
-		if err != nil {
-			return bitmap, fmt.Errorf("failed to parse hex: %v", err)
-		}
+	// Parse primary bitmap (bits 1-64).
+	parseBitmapTier(data[offset:offset+bitmapBytes], bitmap[:64])
+	consumed := bitmapBytes
 
-		// Map each bit to the boolean array
-		for j := 0; j < 4; j++ {
-			// Calculate the bit's position in the boolean array
-			// (i * 4) shifts the bit to its correct quartet, +j adjusts for the bit's position within the quartet
-			position := (i * 4) + j
-			bitmap[position] = val&(1<<(3-j)) != 0
+	// Bit 1 set → secondary bitmap follows (bits 65-128).
+	if bitmap[0] {
+		if offset+consumed+bitmapBytes > len(data) {
+			return bitmap, 0, ErrTruncatedBitmap
 		}
+		parseBitmapTier(data[offset+consumed:offset+consumed+bitmapBytes], bitmap[64:128])
+		consumed += bitmapBytes
 	}
 
-	return bitmap, nil
+	return bitmap, consumed, nil
 }
 
-// generateBitmap converts a boolean array representing the presence of fields
-// into a hexadecimal string representation of the bitmap.
-func generateBitmap(bitmap [128]bool) string {
-	var bitmapHex string
-
-	for i := 0; i < 64; i += 4 {
-		// Accumulate 4 bits to form a single hex digit
-		var val byte
-		for j := 0; j < 4; j++ {
-			val <<= 1
-			if bitmap[i+j] {
-				val |= 1
-			}
+// parseBitmapTier maps 8 raw bytes into 64 consecutive bool slots.
+func parseBitmapTier(raw []byte, bits []bool) {
+	for i, b := range raw {
+		for j := 0; j < 8; j++ {
+			bits[i*8+j] = b&(1<<(7-uint(j))) != 0
 		}
-		// Convert the 4-bit value to a hex character and append it to the result string
-		bitmapHex += fmt.Sprintf("%X", val)
+	}
+}
+
+// buildBitmaps encodes the field presence map into one or two 8-byte bitmap tiers.
+// It automatically sets bit 1 when any field > 64 is present.
+func buildBitmaps(fields map[int][]byte) []byte {
+	var bits [128]bool
+
+	for fieldNum := range fields {
+		if fieldNum < 2 || fieldNum > 128 {
+			continue
+		}
+		bits[fieldNum-1] = true
 	}
 
-	return bitmapHex
+	// Determine if we need a secondary bitmap.
+	needSecondary := false
+	for i := 64; i < 128; i++ {
+		if bits[i] {
+			needSecondary = true
+			break
+		}
+	}
+
+	if needSecondary {
+		bits[0] = true // Set bit 1 to signal secondary bitmap presence.
+	}
+
+	if needSecondary {
+		out := make([]byte, bitmapBytes*2)
+		encodeBitmapTier(bits[:64], out[:bitmapBytes])
+		encodeBitmapTier(bits[64:128], out[bitmapBytes:])
+		return out
+	}
+
+	out := make([]byte, bitmapBytes)
+	encodeBitmapTier(bits[:64], out)
+	return out
+}
+
+// encodeBitmapTier packs 64 bool slots into 8 bytes.
+func encodeBitmapTier(bits []bool, out []byte) {
+	for i := 0; i < 8; i++ {
+		var b byte
+		for j := 0; j < 8; j++ {
+			if bits[i*8+j] {
+				b |= 1 << (7 - uint(j))
+			}
+		}
+		out[i] = b
+	}
 }

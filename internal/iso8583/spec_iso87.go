@@ -1,56 +1,5 @@
-// Package iso8583lib is the public-facing API for the go-iso8583 library.
-// It re-exports the types and functions from the internal package so that
-// external callers have a clean, stable import path.
-package iso8583lib
+package iso8583
 
-import "github.com/leo-aa88/go-iso8583/internal/iso8583"
-
-// Re-export types so callers only need to import this package.
-
-type (
-	Spec         = iso8583.Spec
-	FieldSpec    = iso8583.FieldSpec
-	Message      = iso8583.Message
-	FieldError   = iso8583.FieldError
-	LengthType   = iso8583.LengthType
-	ContentType  = iso8583.ContentType
-	EncodingType = iso8583.EncodingType
-	PadDirection = iso8583.PadDirection
-)
-
-// LengthType constants.
-const (
-	Fixed  = iso8583.Fixed
-	LLVAR  = iso8583.LLVAR
-	LLLVAR = iso8583.LLLVAR
-)
-
-// ContentType constants.
-const (
-	Numeric      = iso8583.Numeric
-	Alpha        = iso8583.Alpha
-	AlphaNumeric = iso8583.AlphaNumeric
-	Binary       = iso8583.Binary
-)
-
-// EncodingType constants.
-const (
-	ASCII = iso8583.ASCII
-	BCD   = iso8583.BCD
-)
-
-// PadDirection constants.
-const (
-	PadLeft  = iso8583.PadLeft
-	PadRight = iso8583.PadRight
-)
-
-// NewISO87AsciiSpec returns a Spec that covers common ISO8583-1987 fields
-// using ASCII encoding.  This is provided as a convenience for testing and
-// as a reference for building custom specs.
-//
-// Engineers building production systems should define their own Spec with the
-// exact field set, lengths, and encodings mandated by their scheme.
 func NewISO87AsciiSpec() *Spec {
 	return &Spec{
 		Fields: map[int]FieldSpec{
@@ -72,29 +21,9 @@ func NewISO87AsciiSpec() *Spec {
 			43: {LengthType: Fixed, MaxLength: 40, ContentType: AlphaNumeric, Encoding: ASCII, PadDirection: PadRight, PadChar: ' '},
 			48: {LengthType: LLLVAR, MaxLength: 999, ContentType: AlphaNumeric, Encoding: ASCII, PadChar: ' '},
 			49: {LengthType: Fixed, MaxLength: 3, ContentType: Numeric, Encoding: ASCII, PadDirection: PadLeft, PadChar: '0'},
-			52: {LengthType: Fixed, MaxLength: 16, ContentType: Numeric, Encoding: ASCII, PadDirection: PadLeft, PadChar: '0'},
-			54: {LengthType: LLLVAR, MaxLength: 120, ContentType: AlphaNumeric, Encoding: ASCII, PadChar: ' '},
 			55: {LengthType: LLLVAR, MaxLength: 999, ContentType: Binary, Encoding: ASCII, PadChar: 0x00},
-			// Field 70 is in the secondary bitmap (bit 70), used to test secondary bitmap support.
 			70: {LengthType: Fixed, MaxLength: 3, ContentType: Numeric, Encoding: ASCII, PadDirection: PadLeft, PadChar: '0'},
 			90: {LengthType: Fixed, MaxLength: 42, ContentType: Numeric, Encoding: ASCII, PadDirection: PadLeft, PadChar: '0'},
 		},
 	}
-}
-
-// NewMessage returns an initialised Message with the given MTI.
-func NewMessage(mti string) *Message {
-	return iso8583.NewMessage(mti)
-}
-
-// Parse decodes a raw ISO8583 byte slice into a Message using the provided Spec.
-// See the internal package documentation for the full wire format description.
-func Parse(spec *Spec, data []byte) (*Message, error) {
-	return iso8583.Parse(spec, data)
-}
-
-// Build encodes a Message into a raw ISO8583 byte slice using the provided Spec.
-// All fields are validated, padded, and encoded according to their FieldSpec.
-func Build(spec *Spec, msg *Message) ([]byte, error) {
-	return iso8583.Build(spec, msg)
 }
