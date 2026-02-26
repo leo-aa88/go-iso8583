@@ -27,7 +27,7 @@ jobs:
         run: go mod tidy
 
       - name: Verify no uncommitted changes after tidy
-        run: git diff --exit-code go.sum
+        run: git diff --exit-code go.mod
 
       - name: Vet
         run: go vet ./...
