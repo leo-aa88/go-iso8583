@@ -1,51 +1,41 @@
 # go-iso8583
 
-A production-grade, spec-driven ISO8583 message parsing and building library written in Go.
+A **spec-first, deterministic ISO8583 engine** for Go.
 
-## Features
+`go-iso8583` is built around explicit message specifications, strict validation, and predictable wire output. It avoids reflection and struct-tag magic in favor of full control over every field in the message.
 
-- **Spec-driven architecture** — every field's length type, content type, encoding, and padding is defined in a `Spec` struct; no hardcoded logic
-- **Full bitmap support** — primary bitmap (fields 1–64) and secondary bitmap (fields 65–128) with automatic bit-1 management
-- **All common length types** — Fixed, LLVAR (2-digit ASCII prefix), and LLLVAR (3-digit ASCII prefix)
-- **Multiple encodings** — ASCII and BCD (packed binary-coded decimal)
-- **Strict validation** — content type, length bounds, and encoding errors are all caught before touching the wire
-- **Typed errors** — every error identifies the field number and failure reason
-- **Zero external dependencies** — pure Go 1.20+
-- **Comprehensive test suite** — table-driven unit tests covering parsing, building, encoding, bitmaps, and error paths
+ISO8583 remains a transport-layer concern. Your business structs stay separate.
 
 ---
 
-## Project Structure
+## Philosophy
 
-```
-go-iso8583/
-├── cmd/
-│   └── isoserver/
-│       └── main.go              # Example application (build → parse → print)
-├── internal/
-│   └── iso8583/
-│       ├── bitmap.go            # Primary/secondary bitmap encode & decode
-│       ├── bitmap_test.go
-│       ├── builder.go           # Build()
-│       ├── builder_test.go
-│       ├── encoding.go          # BCD, ASCII, padding, content validation
-│       ├── encoding_test.go
-│       ├── errors.go            # FieldError, sentinel errors
-│       ├── errors_test.go
-│       ├── message.go           # Message type with Set/Get helpers
-│       ├── message_test.go
-│       ├── parser.go            # Parse()
-│       ├── parser_test.go
-│       ├── spec.go              # Spec, FieldSpec, and all enum types
-│       ├── spec_iso87.go        # Built-in ISO8583-1987 ASCII spec
-│       ├── spec_test.go
-│       └── testhelpers_test.go  # Shared test helpers
-├── pkg/
-│   └── iso8583lib/
-│       ├── api.go               # Public re-export of internal types + functions
-│       └── api_test.go          # Integration tests via the public API
-└── Makefile
-```
+* **Spec as code** — every ISO8583 variant is defined explicitly in a `Spec` struct. Reviewable, versionable, auditable.
+* **Deterministic behavior** — no hidden reflection or runtime tag parsing.
+* **Strict validation before wire** — content type, encoding, length bounds, and padding enforced early.
+* **Precise field-level errors** — failures are scoped to exact field numbers.
+* **Minimal surface area** — zero external dependencies, focused on the core protocol.
+
+This library is suited for:
+
+* Custom ISO8583 variants
+* Systems that require explicit message definitions
+* Infrastructure components where predictability matters
+* Environments that prefer compile-time visibility over tag-driven mapping
+
+---
+
+## Features
+
+* Spec-driven field definitions (`Spec` + `FieldSpec`)
+* Primary and secondary bitmap support (automatic bit-1 management)
+* Fixed, LLVAR, and LLLVAR field types
+* ASCII and BCD encodings
+* Strict content-type enforcement (`Numeric`, `Alpha`, `AlphaNumeric`, `Binary`)
+* Typed `*FieldError` for field-level failures
+* Sentinel errors for structural issues
+* Comprehensive table-driven test coverage
+* Go 1.20+ only, no dependencies
 
 ---
 
@@ -57,16 +47,16 @@ go get github.com/leo-aa88/go-iso8583
 
 ---
 
-## Spec Definition
+## Defining a Spec
 
-A `Spec` maps field numbers to `FieldSpec` descriptors. You define one `Spec` per ISO8583 variant you need to support.
+A `Spec` maps ISO8583 field numbers to `FieldSpec` descriptors.
+You define one `Spec` per ISO8583 variant.
 
 ```go
 import lib "github.com/leo-aa88/go-iso8583/pkg/iso8583lib"
 
 var mySpec = &lib.Spec{
     Fields: map[int]lib.FieldSpec{
-        // Fixed 6-digit numeric field, left-padded with '0'
         3: {
             LengthType:   lib.Fixed,
             MaxLength:    6,
@@ -75,7 +65,6 @@ var mySpec = &lib.Spec{
             PadDirection: lib.PadLeft,
             PadChar:      '0',
         },
-        // LLVAR field (2-digit ASCII length prefix), up to 19 digits
         2: {
             LengthType:  lib.LLVAR,
             MaxLength:   19,
@@ -83,7 +72,6 @@ var mySpec = &lib.Spec{
             Encoding:    lib.ASCII,
             PadChar:     '0',
         },
-        // LLLVAR alphanumeric field (3-digit ASCII length prefix), up to 999 chars
         48: {
             LengthType:  lib.LLLVAR,
             MaxLength:   999,
@@ -91,16 +79,14 @@ var mySpec = &lib.Spec{
             Encoding:    lib.ASCII,
             PadChar:     ' ',
         },
-        // Fixed numeric field with BCD encoding
         4: {
             LengthType:   lib.Fixed,
             MaxLength:    12,
             ContentType:  lib.Numeric,
-            Encoding:     lib.BCD,    // "000000050000" → 6 bytes on wire
+            Encoding:     lib.BCD,
             PadDirection: lib.PadLeft,
             PadChar:      '0',
         },
-        // Secondary bitmap field (field > 64)
         70: {
             LengthType:   lib.Fixed,
             MaxLength:    3,
@@ -113,41 +99,42 @@ var mySpec = &lib.Spec{
 }
 ```
 
-### Enum reference
+### Enums
 
-| Type | Constants |
-|------|-----------|
-| `LengthType` | `Fixed`, `LLVAR`, `LLLVAR` |
-| `ContentType` | `Numeric`, `Alpha`, `AlphaNumeric`, `Binary` |
-| `EncodingType` | `ASCII`, `BCD` |
-| `PadDirection` | `PadLeft`, `PadRight` |
+| Type           | Values                                       |
+| -------------- | -------------------------------------------- |
+| `LengthType`   | `Fixed`, `LLVAR`, `LLLVAR`                   |
+| `ContentType`  | `Numeric`, `Alpha`, `AlphaNumeric`, `Binary` |
+| `EncodingType` | `ASCII`, `BCD`                               |
+| `PadDirection` | `PadLeft`, `PadRight`                        |
 
 ---
 
-## Build Example
+## Building a Message
 
 ```go
 import lib "github.com/leo-aa88/go-iso8583/pkg/iso8583lib"
 
-spec := lib.NewISO87AsciiSpec() // or your own Spec
+spec := lib.NewISO87AsciiSpec()
 
 msg := lib.NewMessage("0200")
-msg.Set(2,  "4111111111111111") // LLVAR PAN
-msg.Set(3,  "000000")           // Fixed processing code
-msg.Set(4,  "000000010000")     // Fixed amount
-msg.Set(11, "000001")           // Fixed STAN
-msg.Set(49, "840")              // Fixed currency code
+msg.Set(2,  "4111111111111111")
+msg.Set(3,  "000000")
+msg.Set(4,  "000000010000")
+msg.Set(11, "000001")
+msg.Set(49, "840")
 
 wire, err := lib.Build(spec, msg)
 if err != nil {
     log.Fatal(err)
 }
+
 fmt.Printf("%X\n", wire)
 ```
 
 ---
 
-## Parse Example
+## Parsing a Message
 
 ```go
 import lib "github.com/leo-aa88/go-iso8583/pkg/iso8583lib"
@@ -156,7 +143,6 @@ spec := lib.NewISO87AsciiSpec()
 
 parsed, err := lib.Parse(spec, wire)
 if err != nil {
-    // Check if it is a field-level error
     var fe *lib.FieldError
     if errors.As(err, &fe) {
         log.Fatalf("field %d failed: %v", fe.Field, fe.Err)
@@ -173,105 +159,83 @@ if pan, ok := parsed.Get(2); ok {
 
 ---
 
-## Secondary Bitmap
+## Bitmap Handling
 
-ISO8583 supports up to 128 fields. The primary bitmap covers fields 1–64 and the secondary bitmap covers fields 65–128.
+* Primary bitmap: fields 1–64
+* Secondary bitmap: fields 65–128
 
-**Bit 1** of the primary bitmap is the secondary-bitmap indicator. When set, the parser reads an additional 8 bytes immediately after the primary bitmap as the secondary bitmap.
-
-`Build` handles this automatically: if any field number > 64 is present in your `Message`, bit 1 is set and the secondary bitmap is emitted. You never need to manage bit 1 yourself.
+If any field > 64 is present, `Build` automatically sets bit 1 and emits the secondary bitmap. Manual bitmap management is not required.
 
 ```go
 msg := lib.NewMessage("0800")
-msg.Set(70, "301") // Field 70 is in the secondary bitmap
+msg.Set(70, "301")
 
 wire, _ := lib.Build(spec, msg)
-// wire[4] & 0x80 != 0  ← bit 1 auto-set
-// wire[4:20] contains both bitmaps (16 bytes total)
 ```
 
 ---
 
-## LLVAR and LLLVAR
+## Variable-Length Fields
 
-Variable-length fields are prefixed on the wire with their content length as ASCII decimal digits.
+| Type     | Prefix         | Max |
+| -------- | -------------- | --- |
+| `LLVAR`  | 2 ASCII digits | 99  |
+| `LLLVAR` | 3 ASCII digits | 999 |
 
-| Type | Prefix | Max representable length |
-|------|--------|--------------------------|
-| `LLVAR` | 2 digits | 99 |
-| `LLLVAR` | 3 digits | 999 |
-
-The `MaxLength` in `FieldSpec` further caps what values are accepted. If a parsed message declares a length exceeding `MaxLength`, `Parse` returns a `*FieldError`.
-
-```
-Wire for LLVAR field 2 value "4111111111111111" (16 digits):
-  "16" + "4111111111111111"
-
-Wire for LLLVAR field 48 value "HELLO" (5 chars):
-  "005" + "HELLO"
-```
+`MaxLength` further constrains accepted values.
+If declared wire length exceeds `MaxLength`, `Parse` returns `*FieldError`.
 
 ---
 
 ## BCD Encoding
 
-BCD (Binary-Coded Decimal) packs two decimal digits per byte. Only `Numeric` + `BCD` combinations are valid.
+BCD packs two decimal digits per byte.
 
 ```
-"1234"  → [0x12, 0x34]   (2 bytes)
-"12345" → [0x01, 0x23, 0x45]  (odd → leading zero nibble added)
+"1234"  → [0x12, 0x34]
+"12345" → [0x01, 0x23, 0x45]
 ```
 
-On decode, any leading zero nibble inserted for odd-length values is removed automatically.
+Odd-length values are padded internally and normalized on decode.
+
+Only `Numeric + BCD` combinations are valid.
 
 ---
 
-## Error Handling
+## Error Model
 
-All field-level errors are returned as `*FieldError`:
+Field-level errors:
 
 ```go
 type FieldError struct {
-    Field int    // ISO8583 field number
-    Err   error  // specific reason
+    Field int
+    Err   error
 }
 ```
 
-Sentinel errors for non-field failures:
+Structural sentinel errors:
 
-| Error | When |
-|-------|------|
-| `ErrTruncatedMTI` | fewer than 4 bytes available |
-| `ErrTruncatedBitmap` | bitmap bytes are cut off |
+| Error                | Condition           |
+| -------------------- | ------------------- |
+| `ErrTruncatedMTI`    | < 4 bytes available |
+| `ErrTruncatedBitmap` | bitmap incomplete   |
 
-```go
-var fe *lib.FieldError
-if errors.As(err, &fe) {
-    switch {
-    case fe.Field == 2:
-        // PAN-specific handling
-    default:
-        log.Printf("field %d: %v", fe.Field, fe.Err)
-    }
-}
-```
+Errors are explicit and type-checkable via `errors.As`.
 
 ---
 
-## Running Tests
+## Testing
+
 ```sh
-make test                  # run all tests
-make test-verbose          # run with -v
-make test-cover            # print coverage summary
-make cover-html            # open HTML coverage report in browser
+make test
+make test-cover
 ```
 
-Or directly with go:
+Or:
+
 ```sh
 go test ./...
-go test ./internal/iso8583/ -v
 go test ./... -coverprofile=coverage.out -covermode=atomic
-go tool cover -html=coverage.out
 ```
 
 ---
