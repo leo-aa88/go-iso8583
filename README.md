@@ -276,11 +276,13 @@ go tool cover -html=coverage.out
 
 ---
 
-## Related Tools
+## Ecosystem & External Tools
 
-The following are external tools and projects within the ecosystem that you might find useful when working with ISO 8583 messages. Please note that these are maintained independently.
+The following are independently maintained tools in the ISO 8583 ecosystem. This project is not affiliated with them.
 
-* **[IsoFluent](https://isofluent.com)** — A free, client-side visual debugging suite for payment systems engineers. It provides a web-based interface for parsing and inspecting ISO 8583 messages, alongside utilities for handling EMV and TLV data.
+* **[IsoFluent](https://isofluent.com)** — Web-based ISO 8583 message inspection and debugging tool with EMV and TLV utilities.
+
+If you maintain a relevant ISO 8583 tool, feel free to open a PR.
 
 ---
 
