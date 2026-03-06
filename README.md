@@ -240,6 +240,16 @@ go test ./... -coverprofile=coverage.out -covermode=atomic
 
 ---
 
+## Ecosystem & External Tools
+
+The following are independently maintained tools in the ISO 8583 ecosystem. This project is not affiliated with them.
+
+* **[IsoFluent](https://isofluent.com)** — Web-based ISO 8583 message inspection and debugging tool with EMV and TLV utilities.
+
+If you maintain a relevant ISO 8583 tool, feel free to open a PR.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
